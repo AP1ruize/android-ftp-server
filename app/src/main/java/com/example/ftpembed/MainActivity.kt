@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_IP = "ip"
         const val EXTRA_PORT = "port"
         const val EXTRA_ROOT = "root"
+        const val EXTRA_ROOT_LABEL = "root_label"
         const val EXTRA_ERR = "error"
         const val EXTRA_MESSAGE = "message"
     }
@@ -43,93 +44,107 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun AppUI() {
         val context = LocalContext.current
-        var rootUri by remember { mutableStateOf<String?>(null) }
+        val settings = remember { FtpSettingsRepository(context) }
+
         var rootLabel by remember { mutableStateOf("未选择目录") }
         var status by remember { mutableStateOf("状态：未启动") }
         var info by remember { mutableStateOf("连接信息会显示在这里") }
         var message by remember { mutableStateOf("") }
         var isRunning by remember { mutableStateOf(false) }
-        val prefs = context.getSharedPreferences("ftp_prefs", MODE_PRIVATE)
+        var hasValidRoot by remember { mutableStateOf(false) }
 
-        var username by remember { mutableStateOf(prefs.getString("ftp_username", "user") ?: "user") }
-        var password by remember { mutableStateOf(prefs.getString("ftp_password", "1234") ?: "1234") }
-        var allowAnonymous by remember { mutableStateOf(prefs.getBoolean("ftp_allow_anon", true)) }
-
-
-
-        rootUri = prefs.getString("rootUri", null)
-        if (rootUri != null) rootLabel = "已选择目录：$rootUri"
+        var username by remember { mutableStateOf(settings.getCredentials().username) }
+        var password by remember { mutableStateOf(settings.getCredentials().password) }
+        var allowAnonymous by remember { mutableStateOf(settings.getCredentials().allowAnonymous) }
+        var portText by remember { mutableStateOf(settings.getPort().toString()) }
 
         val openDirLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocumentTree(),
             onResult = { uri: Uri? ->
                 uri?.let {
-                    context.contentResolver.takePersistableUriPermission(
-                        it,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    )
-                    prefs.edit().putString("rootUri", it.toString()).apply()
-                    rootUri = it.toString()
-                    rootLabel = "已选择目录：$it"
+                    settings.saveRootDirectory(it)
+                    hasValidRoot = true
+                    rootLabel = settings.getRootLabel()
+                    Toast.makeText(context, "目录已保存", Toast.LENGTH_SHORT).show()
                 }
-            }
+            },
         )
 
         val notifPermissionLauncher =
             rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
         LaunchedEffect(Unit) {
-            if (Build.VERSION.SDK_INT >= 33)
+            if (Build.VERSION.SDK_INT >= 33) {
                 notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
 
-            // ✅ 启动前台服务，确保通知常驻（未运行状态）
+            if (settings.hasConfiguredRoot()) {
+                if (settings.validateAndRepairSavedRoot()) {
+                    hasValidRoot = true
+                    rootLabel = settings.getRootLabel()
+                } else {
+                    hasValidRoot = false
+                    rootLabel = "已保存的目录已失效，请重新选择"
+                    Toast.makeText(context, "FTP 根目录权限已失效，请重新选择", Toast.LENGTH_LONG).show()
+                }
+            }
+
             val intent = Intent(context, FtpForegroundService::class.java).apply {
                 action = FtpForegroundService.ACTION_PING
             }
             ContextCompat.startForegroundService(context, intent)
         }
 
-        // 监听广播（包括新文件事件）
         DisposableEffect(Unit) {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     intent ?: return
-                    if (intent.action == ACTION_STATUS) {
-                        val running = intent.getBooleanExtra(EXTRA_RUNNING, false)
-                        isRunning = running  // ✅ 保存运行状态
-                        val ip = intent.getStringExtra(EXTRA_IP) ?: "0.0.0.0"
-                        val port = intent.getIntExtra(EXTRA_PORT, BuildConfig.DEFAULT_FTP_PORT)
-                        val root = intent.getStringExtra(EXTRA_ROOT) ?: "-"
-                        val err = intent.getStringExtra(EXTRA_ERR)
-                        val msg = intent.getStringExtra(EXTRA_MESSAGE)
+                    if (intent.action != ACTION_STATUS) return
 
-                        if (msg != null) message = msg
-                        status = if (running) "状态：已启动" else "状态：未启动"
+                    val running = intent.getBooleanExtra(EXTRA_RUNNING, false)
+                    isRunning = running
+                    val ip = intent.getStringExtra(EXTRA_IP) ?: "0.0.0.0"
+                    val port = intent.getIntExtra(EXTRA_PORT, BuildConfig.DEFAULT_FTP_PORT)
+                    val root = intent.getStringExtra(EXTRA_ROOT) ?: "-"
+                    val rootDisplay = intent.getStringExtra(EXTRA_ROOT_LABEL)
+                    val err = intent.getStringExtra(EXTRA_ERR)
+                    val msg = intent.getStringExtra(EXTRA_MESSAGE)
 
-                        val prefs = getSharedPreferences("ftp_prefs", MODE_PRIVATE)
-                        val username = prefs.getString("ftp_username", "user") ?: "user"
-                        val allowAnon = prefs.getBoolean("ftp_allow_anon", true)
-                        val currentUser = if (allowAnon) "$username / anonymous" else username
+                    if (msg != null) message = msg
+                    status = if (running) "状态：已启动" else "状态：未启动"
 
-                        info = if (running)
-                            "连接：ftp://$ip:$port  用户：$currentUser"
-                        else "连接信息会显示在这里"
-                        rootLabel = "根目录：$root"
-                        err?.let { info = "启动失败：$it" }
+                    val creds = settings.getCredentials()
+                    val currentUser = if (creds.allowAnonymous) {
+                        "${creds.username} / anonymous"
+                    } else {
+                        creds.username
                     }
+
+                    info = if (running) {
+                        "连接：ftp://$ip:$port  用户：$currentUser"
+                    } else {
+                        "连接信息会显示在这里"
+                    }
+                    rootLabel = if (rootDisplay != null) {
+                        "根目录：$rootDisplay\n$root"
+                    } else {
+                        "根目录：$root"
+                    }
+                    err?.let { info = "启动失败：$it" }
                 }
             }
-            context.applicationContext.registerReceiver(receiver, IntentFilter(ACTION_STATUS), RECEIVER_NOT_EXPORTED)
-
+            context.applicationContext.registerReceiver(
+                receiver,
+                IntentFilter(ACTION_STATUS),
+                RECEIVER_NOT_EXPORTED,
+            )
             onDispose { context.applicationContext.unregisterReceiver(receiver) }
         }
-
-        var portText by remember { mutableStateOf(BuildConfig.DEFAULT_FTP_PORT.toString()) }
 
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(20.dp)
+                modifier = Modifier.padding(20.dp),
             ) {
                 Text("FTP Server 控制台", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(16.dp))
@@ -146,74 +161,75 @@ class MainActivity : ComponentActivity() {
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp)
+                        .padding(top = 12.dp),
                 )
 
                 OutlinedTextField(
                     value = username,
                     onValueChange = {
                         username = it
-                        prefs.edit().putString("ftp_username", it).apply()
+                        settings.setUsername(it)
                     },
                     label = { Text("用户名") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp)
+                        .padding(top = 12.dp),
                 )
 
                 OutlinedTextField(
                     value = password,
                     onValueChange = {
                         password = it
-                        prefs.edit().putString("ftp_password", it).apply()
+                        settings.setPassword(it)
                     },
                     label = { Text("密码") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp)
+                        .padding(top = 12.dp),
                 )
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp)
+                        .padding(top = 12.dp),
                 ) {
                     Checkbox(
                         checked = allowAnonymous,
                         onCheckedChange = {
                             allowAnonymous = it
-                            prefs.edit().putBoolean("ftp_allow_anon", it).apply()
+                            settings.setAllowAnonymous(it)
                         },
-                        enabled = !isRunning
+                        enabled = !isRunning,
                     )
                     Text("允许匿名访问")
                 }
 
-
                 Row(Modifier.padding(top = 20.dp)) {
                     Button(
                         onClick = {
-                            if (rootUri == null) {
-                                Toast.makeText(context, "请先选择FTP根目录", Toast.LENGTH_SHORT).show()
+                            if (!hasValidRoot || !settings.hasConfiguredRoot()) {
+                                Toast.makeText(context, "请先选择 FTP 根目录", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            if (!settings.validateAndRepairSavedRoot()) {
+                                hasValidRoot = false
+                                rootLabel = "已保存的目录已失效，请重新选择"
+                                Toast.makeText(context, "目录权限已失效，请重新选择", Toast.LENGTH_LONG).show()
                                 return@Button
                             }
                             val port = portText.toIntOrNull() ?: BuildConfig.DEFAULT_FTP_PORT
+                            settings.setPort(port)
                             val intent = Intent(context, FtpForegroundService::class.java).apply {
                                 action = FtpForegroundService.ACTION_START
                                 putExtra(FtpForegroundService.EXTRA_PORT, port)
-                                putExtra(FtpForegroundService.EXTRA_ROOT_URI, rootUri)
-
-                                putExtra(FtpForegroundService.EXTRA_USERNAME, username)
-                                putExtra(FtpForegroundService.EXTRA_PASSWORD, password)
-                                putExtra(FtpForegroundService.EXTRA_ALLOW_ANON, allowAnonymous)
                             }
                             ContextCompat.startForegroundService(context, intent)
                         },
                         modifier = Modifier.weight(1f),
-                        enabled = !isRunning // ✅ 仅在未启动时可点
+                        enabled = !isRunning,
                     ) { Text("启动 FTP") }
 
                     Spacer(Modifier.width(12.dp))
@@ -226,7 +242,7 @@ class MainActivity : ComponentActivity() {
                             context.startService(intent)
                         },
                         modifier = Modifier.weight(1f),
-                        enabled = isRunning // ✅ 仅在运行时可点
+                        enabled = isRunning,
                     ) { Text("停止 FTP") }
                 }
 
