@@ -23,6 +23,11 @@ class FtpSettingsRepository(context: Context) {
         val allowAnonymous: Boolean,
     )
 
+    data class RootDisplayInfo(
+        val label: String,
+        val absolutePath: String,
+    )
+
     sealed class RootResolveResult {
         data class Success(
             val dir: File,
@@ -32,6 +37,7 @@ class FtpSettingsRepository(context: Context) {
 
         data class Fallback(
             val dir: File,
+            val displayLabel: String,
             val reason: String,
         ) : RootResolveResult()
 
@@ -42,16 +48,45 @@ class FtpSettingsRepository(context: Context) {
 
     fun getRootDisplayName(): String? = prefs.getString(KEY_ROOT_DISPLAY_NAME, null)
 
-    fun getRootLabel(): String {
-        val name = getRootDisplayName()
-        return when {
-            name != null -> "已选择：$name"
-            getRootUri() != null -> "已选择目录（请确认权限有效）"
-            else -> "未选择目录"
-        }
+    fun hasSafRoot(): Boolean = !getRootUri().isNullOrBlank()
+
+    /** SAF 有效或默认 File 目录可写时返回 true。 */
+    fun canStartFtp(): Boolean = resolveRootDirectory(requireSaf = false) !is RootResolveResult.Failure
+
+    fun getDefaultRootLabel(): String {
+        val dir = defaultRootDir()
+        return "默认：${BuildConfig.DEFAULT_ROOT_RELATIVE}\n${dir.absolutePath}"
     }
 
-    fun hasConfiguredRoot(): Boolean = !getRootUri().isNullOrBlank()
+    /** UI 在未启动 FTP 时展示的根目录说明。 */
+    fun getConfiguredRootLabel(): String {
+        val uriString = getRootUri()
+        if (!uriString.isNullOrBlank() && isRootUriValid(uriString)) {
+            val name = getRootDisplayName() ?: "已选目录"
+            when (val resolved = resolveRootDirectory(requireSaf = false)) {
+                is RootResolveResult.Success -> {
+                    return "根目录：$name\n${resolved.dir.absolutePath}"
+                }
+                is RootResolveResult.Fallback -> {
+                    return "根目录：$name\n${resolved.dir.absolutePath}"
+                }
+                is RootResolveResult.Failure -> Unit
+            }
+        }
+        return getDefaultRootLabel()
+    }
+
+    /** Service 广播 / 通知使用的当前有效根目录信息。 */
+    fun getEffectiveRootInfo(): RootDisplayInfo {
+        return when (val resolved = resolveRootDirectory(requireSaf = false)) {
+            is RootResolveResult.Success -> RootDisplayInfo(resolved.displayLabel, resolved.dir.absolutePath)
+            is RootResolveResult.Fallback -> RootDisplayInfo(resolved.displayLabel, resolved.dir.absolutePath)
+            is RootResolveResult.Failure -> {
+                val dir = defaultRootDir()
+                RootDisplayInfo("默认：${BuildConfig.DEFAULT_ROOT_RELATIVE}", dir.absolutePath)
+            }
+        }
+    }
 
     fun getPort(): Int = prefs.getInt(KEY_PORT, BuildConfig.DEFAULT_FTP_PORT)
 
@@ -77,9 +112,6 @@ class FtpSettingsRepository(context: Context) {
         prefs.edit().putBoolean(KEY_ALLOW_ANON, value).apply()
     }
 
-    /**
-     * 用户通过 SAF 选择目录后调用：持久化 URI 权限并写入 prefs。
-     */
     fun saveRootDirectory(uri: Uri) {
         appContext.contentResolver.takePersistableUriPermission(
             uri,
@@ -101,11 +133,9 @@ class FtpSettingsRepository(context: Context) {
             .apply()
     }
 
-    /**
-     * 启动时校验已保存的 SAF 目录；失效则清除 prefs 并返回 false。
-     */
+    /** 启动时校验 SAF 目录；失效则清除并回退默认路径。 */
     fun validateAndRepairSavedRoot(): Boolean {
-        val uriString = getRootUri() ?: return false
+        val uriString = getRootUri() ?: return true
         if (isRootUriValid(uriString)) return true
         clearRootDirectory()
         return false
@@ -122,9 +152,9 @@ class FtpSettingsRepository(context: Context) {
     }
 
     /**
-     * 解析 FTP 写入根目录：优先 SAF URI → File 映射（路线 A），失败时回退默认目录（路线 C）。
+     * 解析 FTP 写入根目录：优先 SAF URI → File 映射（路线 A），否则默认 File 目录（路线 C）。
      */
-    fun resolveRootDirectory(requireSaf: Boolean = true): RootResolveResult {
+    fun resolveRootDirectory(requireSaf: Boolean = false): RootResolveResult {
         val uriString = getRootUri()
         if (!uriString.isNullOrBlank()) {
             if (!isRootUriValid(uriString)) {
@@ -145,7 +175,7 @@ class FtpSettingsRepository(context: Context) {
             }
             return RootResolveResult.Failure(
                 "无法将所选 SAF 目录映射为文件路径。" +
-                    "请改选内部存储下的文件夹（如 Pictures/ftptest）。",
+                    "请改选内部存储下的文件夹（如 ${BuildConfig.DEFAULT_ROOT_RELATIVE}）。",
             )
         }
 
@@ -154,13 +184,18 @@ class FtpSettingsRepository(context: Context) {
         }
 
         val fallback = defaultRootDir().apply { if (!exists()) mkdirs() }
+        if (!fallback.isDirectory || !fallback.canWrite()) {
+            return RootResolveResult.Failure("默认目录不可写：${fallback.absolutePath}")
+        }
         return RootResolveResult.Fallback(
             fallback,
-            "未配置 SAF 目录，使用默认路径：${fallback.absolutePath}",
+            "默认：${BuildConfig.DEFAULT_ROOT_RELATIVE}",
+            "使用默认路径：${fallback.absolutePath}",
         )
     }
 
-    fun defaultRootDir(): File = File(DEFAULT_ROOT_PATH)
+    fun defaultRootDir(): File =
+        File(Environment.getExternalStorageDirectory(), BuildConfig.DEFAULT_ROOT_RELATIVE)
 
     private fun mapSafTreeUriToFile(treeUri: Uri): File? {
         if (!DocumentsContract.isTreeUri(treeUri)) return null
@@ -192,6 +227,5 @@ class FtpSettingsRepository(context: Context) {
 
         const val DEFAULT_USERNAME = "user"
         const val DEFAULT_PASSWORD = "1234"
-        const val DEFAULT_ROOT_PATH = "/storage/emulated/0/Pictures/ftptest"
     }
 }

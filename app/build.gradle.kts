@@ -26,6 +26,7 @@ android {
         versionName = "1.0"
 
         buildConfigField("int", "DEFAULT_FTP_PORT", "2121")
+        buildConfigField("String", "DEFAULT_ROOT_RELATIVE", "\"Pictures/ftptest\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

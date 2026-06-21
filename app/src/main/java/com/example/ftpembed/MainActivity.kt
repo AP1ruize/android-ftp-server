@@ -12,6 +12,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +34,15 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_ROOT_LABEL = "root_label"
         const val EXTRA_ERR = "error"
         const val EXTRA_MESSAGE = "message"
+
+        private const val MAX_LOG_ENTRIES = 200
+    }
+
+    data class FtpLogEntry(
+        val timestamp: String,
+        val text: String,
+    ) {
+        fun formatted(): String = "[$timestamp] $text"
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -46,25 +57,31 @@ class MainActivity : ComponentActivity() {
         val context = LocalContext.current
         val settings = remember { FtpSettingsRepository(context) }
 
-        var rootLabel by remember { mutableStateOf("未选择目录") }
+        var rootLabel by remember { mutableStateOf(settings.getConfiguredRootLabel()) }
         var status by remember { mutableStateOf("状态：未启动") }
         var info by remember { mutableStateOf("连接信息会显示在这里") }
-        var message by remember { mutableStateOf("") }
         var isRunning by remember { mutableStateOf(false) }
-        var hasValidRoot by remember { mutableStateOf(false) }
+        val eventLogs = remember { mutableStateListOf<FtpLogEntry>() }
 
         var username by remember { mutableStateOf(settings.getCredentials().username) }
         var password by remember { mutableStateOf(settings.getCredentials().password) }
         var allowAnonymous by remember { mutableStateOf(settings.getCredentials().allowAnonymous) }
         var portText by remember { mutableStateOf(settings.getPort().toString()) }
 
+        fun appendLog(text: String) {
+            eventLogs.add(0, FtpLogEntry(FtpLogFormatter.currentTimestamp(), text))
+            while (eventLogs.size > MAX_LOG_ENTRIES) {
+                eventLogs.removeAt(eventLogs.lastIndex)
+            }
+        }
+
         val openDirLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocumentTree(),
             onResult = { uri: Uri? ->
                 uri?.let {
                     settings.saveRootDirectory(it)
-                    hasValidRoot = true
-                    rootLabel = settings.getRootLabel()
+                    rootLabel = settings.getConfiguredRootLabel()
+                    appendLog("已选择 FTP 根目录：${settings.getRootDisplayName() ?: it}")
                     Toast.makeText(context, "目录已保存", Toast.LENGTH_SHORT).show()
                 }
             },
@@ -78,15 +95,15 @@ class MainActivity : ComponentActivity() {
                 notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
 
-            if (settings.hasConfiguredRoot()) {
-                if (settings.validateAndRepairSavedRoot()) {
-                    hasValidRoot = true
-                    rootLabel = settings.getRootLabel()
+            if (settings.hasSafRoot()) {
+                if (!settings.validateAndRepairSavedRoot()) {
+                    rootLabel = settings.getConfiguredRootLabel()
+                    Toast.makeText(context, "FTP 根目录权限已失效，已回退默认目录", Toast.LENGTH_LONG).show()
                 } else {
-                    hasValidRoot = false
-                    rootLabel = "已保存的目录已失效，请重新选择"
-                    Toast.makeText(context, "FTP 根目录权限已失效，请重新选择", Toast.LENGTH_LONG).show()
+                    rootLabel = settings.getConfiguredRootLabel()
                 }
+            } else {
+                rootLabel = settings.getConfiguredRootLabel()
             }
 
             val intent = Intent(context, FtpForegroundService::class.java).apply {
@@ -110,7 +127,7 @@ class MainActivity : ComponentActivity() {
                     val err = intent.getStringExtra(EXTRA_ERR)
                     val msg = intent.getStringExtra(EXTRA_MESSAGE)
 
-                    if (msg != null) message = msg
+                    if (msg != null) appendLog(msg)
                     status = if (running) "状态：已启动" else "状态：未启动"
 
                     val creds = settings.getCredentials()
@@ -120,17 +137,17 @@ class MainActivity : ComponentActivity() {
                         creds.username
                     }
 
-                    info = if (running) {
-                        "连接：ftp://$ip:$port  用户：$currentUser"
-                    } else {
-                        "连接信息会显示在这里"
+                    info = when {
+                        err != null -> "启动失败：$err"
+                        running -> "连接：ftp://$ip:$port  用户：$currentUser"
+                        else -> "连接信息会显示在这里"
                     }
-                    rootLabel = if (rootDisplay != null) {
+
+                    rootLabel = if (running && rootDisplay != null) {
                         "根目录：$rootDisplay\n$root"
                     } else {
-                        "根目录：$root"
+                        settings.getConfiguredRootLabel()
                     }
-                    err?.let { info = "启动失败：$it" }
                 }
             }
             context.applicationContext.registerReceiver(
@@ -210,15 +227,13 @@ class MainActivity : ComponentActivity() {
                 Row(Modifier.padding(top = 20.dp)) {
                     Button(
                         onClick = {
-                            if (!hasValidRoot || !settings.hasConfiguredRoot()) {
-                                Toast.makeText(context, "请先选择 FTP 根目录", Toast.LENGTH_SHORT).show()
+                            if (!settings.canStartFtp()) {
+                                Toast.makeText(context, "FTP 根目录不可用", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
-                            if (!settings.validateAndRepairSavedRoot()) {
-                                hasValidRoot = false
-                                rootLabel = "已保存的目录已失效，请重新选择"
-                                Toast.makeText(context, "目录权限已失效，请重新选择", Toast.LENGTH_LONG).show()
-                                return@Button
+                            if (settings.hasSafRoot() && !settings.validateAndRepairSavedRoot()) {
+                                rootLabel = settings.getConfiguredRootLabel()
+                                Toast.makeText(context, "目录权限已失效，已回退默认目录", Toast.LENGTH_LONG).show()
                             }
                             val port = portText.toIntOrNull() ?: BuildConfig.DEFAULT_FTP_PORT
                             settings.setPort(port)
@@ -251,8 +266,33 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.height(8.dp))
                 Text(info, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(16.dp))
-                if (message.isNotEmpty()) {
-                    Text("📂 新文件事件：$message", color = MaterialTheme.colorScheme.primary)
+
+                Text("事件日志", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(8.dp))
+                if (eventLogs.isEmpty()) {
+                    Text(
+                        "暂无事件",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(eventLogs, key = { "${it.timestamp}_${it.text}_${it.hashCode()}" }) { entry ->
+                            Text(
+                                entry.formatted(),
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
             }
         }

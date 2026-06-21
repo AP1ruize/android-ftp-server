@@ -44,8 +44,9 @@ class FtpForegroundService : Service() {
         super.onCreate()
         settings = FtpSettingsRepository(this)
         createNotificationChannel()
-        rootDir = settings.defaultRootDir().apply { if (!exists()) mkdirs() }
-        rootDisplayLabel = rootDir.absolutePath
+        val effective = settings.getEffectiveRootInfo()
+        rootDir = File(effective.absolutePath)
+        rootDisplayLabel = effective.label
         startForeground(NOTIF_ID, buildNotification(false))
     }
 
@@ -78,14 +79,14 @@ class FtpForegroundService : Service() {
             currentPort = port
             settings.setPort(port)
 
-            when (val resolved = settings.resolveRootDirectory(requireSaf = true)) {
+            when (val resolved = settings.resolveRootDirectory(requireSaf = false)) {
                 is FtpSettingsRepository.RootResolveResult.Success -> {
                     rootDir = resolved.dir
                     rootDisplayLabel = resolved.displayLabel
                 }
                 is FtpSettingsRepository.RootResolveResult.Fallback -> {
                     rootDir = resolved.dir
-                    rootDisplayLabel = resolved.dir.absolutePath
+                    rootDisplayLabel = resolved.displayLabel
                 }
                 is FtpSettingsRepository.RootResolveResult.Failure -> {
                     sendStatus(error = resolved.message)
@@ -135,7 +136,7 @@ class FtpForegroundService : Service() {
             startWatchingFiles(rootDir)
             startForeground(NOTIF_ID, buildNotification(true))
             updateForegroundNotification()
-            sendStatus()
+            sendStatus(message = "FTP 服务已启动")
         } catch (e: Exception) {
             running.set(false)
             ftpServer = null
@@ -173,18 +174,30 @@ class FtpForegroundService : Service() {
         running.set(false)
         fileObserver?.stopWatching()
         fileObserver = null
+        val effective = settings.getEffectiveRootInfo()
+        rootDir = File(effective.absolutePath)
+        rootDisplayLabel = effective.label
         updateForegroundNotification()
-        sendStatus()
+        sendStatus(message = "FTP 服务已停止")
+    }
+
+    private fun currentRootInfo(): FtpSettingsRepository.RootDisplayInfo {
+        return if (running.get()) {
+            FtpSettingsRepository.RootDisplayInfo(rootDisplayLabel, rootDir.absolutePath)
+        } else {
+            settings.getEffectiveRootInfo()
+        }
     }
 
     private fun sendStatus(error: String? = null, message: String? = null) {
+        val rootInfo = currentRootInfo()
         val intent = Intent(MainActivity.ACTION_STATUS).apply {
             setPackage(packageName)
             putExtra(MainActivity.EXTRA_RUNNING, running.get())
             putExtra(MainActivity.EXTRA_IP, getLocalIpv4().also { lastIp = it })
             putExtra(MainActivity.EXTRA_PORT, currentPort)
-            putExtra(MainActivity.EXTRA_ROOT, rootDir.absolutePath)
-            putExtra(MainActivity.EXTRA_ROOT_LABEL, rootDisplayLabel)
+            putExtra(MainActivity.EXTRA_ROOT, rootInfo.absolutePath)
+            putExtra(MainActivity.EXTRA_ROOT_LABEL, rootInfo.label)
             if (error != null) putExtra(MainActivity.EXTRA_ERR, error)
             if (message != null) putExtra(MainActivity.EXTRA_MESSAGE, message)
         }
@@ -215,11 +228,8 @@ class FtpForegroundService : Service() {
         val togglePi = PendingIntent.getService(this, 2, toggleIntent, PendingIntent.FLAG_IMMUTABLE)
         val toggleText = if (isRunning) "停止" else "启动"
 
-        val rootLine = if (rootDisplayLabel.isNotBlank()) {
-            "$rootDisplayLabel\n${rootDir.absolutePath}"
-        } else {
-            rootDir.absolutePath
-        }
+        val rootInfo = currentRootInfo()
+        val rootLine = "${rootInfo.label}\n${rootInfo.absolutePath}"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
