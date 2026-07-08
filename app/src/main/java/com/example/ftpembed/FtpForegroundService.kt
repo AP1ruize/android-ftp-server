@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.FileObserver
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.example.ftpembed.ftp.FtpClientStateMachine
 import org.apache.ftpserver.FtpServer
 import org.apache.ftpserver.FtpServerFactory
 import org.apache.ftpserver.listener.ListenerFactory
@@ -37,6 +38,7 @@ class FtpForegroundService : Service() {
     private var lastIp = "0.0.0.0"
     private var fileObserver: FileObserver? = null
     private lateinit var settings: FtpSettingsRepository
+    private val ftpClientStateMachine = FtpClientStateMachine()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -98,8 +100,8 @@ class FtpForegroundService : Service() {
             val creds = settings.getCredentials()
             val serverFactory = FtpServerFactory()
             serverFactory.ftplets = mapOf(
-                "appFtplet" to AppFtplet { msg ->
-                    sendStatus(message = msg)
+                "appFtplet" to AppFtplet(ftpClientStateMachine) { msg, state ->
+                    sendStatus(message = msg, clientState = state.name)
                 },
             )
 
@@ -172,6 +174,7 @@ class FtpForegroundService : Service() {
         }
         ftpServer = null
         running.set(false)
+        ftpClientStateMachine.reset()
         fileObserver?.stopWatching()
         fileObserver = null
         val effective = settings.getEffectiveRootInfo()
@@ -189,7 +192,11 @@ class FtpForegroundService : Service() {
         }
     }
 
-    private fun sendStatus(error: String? = null, message: String? = null) {
+    private fun sendStatus(
+        error: String? = null,
+        message: String? = null,
+        clientState: String = ftpClientStateMachine.state.name,
+    ) {
         val rootInfo = currentRootInfo()
         val intent = Intent(MainActivity.ACTION_STATUS).apply {
             setPackage(packageName)
@@ -198,6 +205,7 @@ class FtpForegroundService : Service() {
             putExtra(MainActivity.EXTRA_PORT, currentPort)
             putExtra(MainActivity.EXTRA_ROOT, rootInfo.absolutePath)
             putExtra(MainActivity.EXTRA_ROOT_LABEL, rootInfo.label)
+            putExtra(MainActivity.EXTRA_FTP_CLIENT_STATE, clientState)
             if (error != null) putExtra(MainActivity.EXTRA_ERR, error)
             if (message != null) putExtra(MainActivity.EXTRA_MESSAGE, message)
         }

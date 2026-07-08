@@ -1,7 +1,7 @@
 # Android FTP Server — 项目现状与已实现功能
 
-> 文档更新日期：2026-06-19  
-> 应用包名：`com.example.ftpembed`  
+> 文档更新日期：2026-07-08  
+> 应用包名：`com.ah.ddns`（`namespace` 仍为 `com.example.ftpembed`）  
 > 项目根目录：`android-ftp-server`（Gradle 工程名 `ftpembed`）  
 > 技术栈：Kotlin · Jetpack Compose · Material3 · Apache FTPServer · Apache MINA · DocumentFile
 
@@ -20,6 +20,7 @@
 - [数据流与通信机制](#数据流与通信机制)
 - [配置与默认值](#配置与默认值)
 - [已知问题与未完成项](#已知问题与未完成项)
+- [ah_ddns / Rauthy 集成](#ah_ddns--rauthy-集成)
 - [构建与验证](#构建与验证)
 
 ---
@@ -106,6 +107,10 @@ FtpForegroundService
 | FTP 启停与文件写入 | ★★★★★ |
 | 默认根目录 + SAF | ★★★★★ |
 | 连接/断开 + 事件日志 | ★★★★☆ |
+| 相机 FTP 状态 Chip | ★★★☆☆ |
+| MVP OAuth 配置（无 PKCE） | ★★☆☆☆ |
+| Rauthy PKCE 登录 | ☆☆☆☆☆ |
+| ah_ddns API / FQDN / IP 上报 | ☆☆☆☆☆ |
 | 迁入 ah_kotlin | ☆☆☆☆☆ |
 
 ---
@@ -119,7 +124,10 @@ FtpForegroundService
 | `AppFtplet.kt` | 连接/断开/上传事件 |
 | `MainActivity.kt` | UI、滚动日志列表 |
 | `FtpForegroundService.kt` | FTP 服务、广播、通知 |
-| `app/build.gradle.kts` | `DEFAULT_FTP_PORT`、`DEFAULT_ROOT_RELATIVE` |
+| `auth/AuthConfig.kt` | MVP OIDC / API 常量 |
+| `ddns/LabelValidator.kt` 等 | DDNS 校验与模型（无 API 客户端） |
+| `ftp/FtpClientStateMachine.kt` | 相机 FTP 连接状态机 |
+| `app/build.gradle.kts` | FTP 默认值 + MVP OIDC BuildConfig |
 
 ---
 
@@ -162,6 +170,21 @@ resolveRootDirectory(requireSaf=false)
 3. **README 未同步**：仍描述旧行为
 4. **无自动化测试**
 5. **安全**：明文 FTP、弱默认密码
+
+---
+
+## ah_ddns / Rauthy 集成
+
+MVP 环境（`mvp.api.alphahalf.cc` + `mvp.auth.alphahalf.cc`）已部署；本 App 鉴权应对齐 ah_ddns 规范 **[`mobile-auth-rauthy.md`](../../../ah_ddns/docs/spec/mobile-auth-rauthy.md)**。
+
+| 文档 | 说明 |
+|------|------|
+| [`RAUTHY_MVP_AUTH.md`](./RAUTHY_MVP_AUTH.md) | MVP Rauthy PKCE 接入指南（**阶段 1 编码主文档**） |
+| [`DDNS_INTEGRATION_PLAN.md`](./DDNS_INTEGRATION_PLAN.md) | 全量 DDNS + FTP 分阶段计划 |
+| [`IMPLEMENTATION_NOTES_2026_07_08.md`](./IMPLEMENTATION_NOTES_2026_07_08.md) | 2026-07-08 编码进度 |
+
+**阶段 0（配置对齐）已完成**：`applicationId=com.ah.ddns`、`AuthConfig`、OAuth deep link。  
+**下一步**：AppAuth + `OidcAuthManager` / `TokenStore` / `AuthRepository`（见 RAUTHY_MVP_AUTH §8）。
 
 ---
 

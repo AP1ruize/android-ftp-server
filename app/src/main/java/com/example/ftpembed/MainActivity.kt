@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_ROOT_LABEL = "root_label"
         const val EXTRA_ERR = "error"
         const val EXTRA_MESSAGE = "message"
+        const val EXTRA_FTP_CLIENT_STATE = "ftp_client_state"
 
         private const val MAX_LOG_ENTRIES = 200
     }
@@ -61,6 +63,7 @@ class MainActivity : ComponentActivity() {
         var status by remember { mutableStateOf("状态：未启动") }
         var info by remember { mutableStateOf("连接信息会显示在这里") }
         var isRunning by remember { mutableStateOf(false) }
+        var ftpClientState by remember { mutableStateOf("Disconnected") }
         val eventLogs = remember { mutableStateListOf<FtpLogEntry>() }
 
         var username by remember { mutableStateOf(settings.getCredentials().username) }
@@ -126,6 +129,7 @@ class MainActivity : ComponentActivity() {
                     val rootDisplay = intent.getStringExtra(EXTRA_ROOT_LABEL)
                     val err = intent.getStringExtra(EXTRA_ERR)
                     val msg = intent.getStringExtra(EXTRA_MESSAGE)
+                    ftpClientState = intent.getStringExtra(EXTRA_FTP_CLIENT_STATE) ?: "Disconnected"
 
                     if (msg != null) appendLog(msg)
                     status = if (running) "状态：已启动" else "状态：未启动"
@@ -266,6 +270,8 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.height(8.dp))
                 Text(info, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(16.dp))
+                FtpClientStateChip(ftpClientState)
+                Spacer(Modifier.height(16.dp))
 
                 Text("事件日志", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(8.dp))
@@ -296,5 +302,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    @Composable
+    private fun FtpClientStateChip(state: String) {
+        val color = when (state) {
+            "Connected" -> Color(0xFF2E7D32)
+            "Transferring" -> Color(0xFF0277BD)
+            else -> Color(0xFFC62828)
+        }
+        val label = when (state) {
+            "Connected" -> "Camera connected"
+            "Transferring" -> "Transfer in progress"
+            else -> "Camera disconnected"
+        }
+
+        AssistChip(
+            onClick = {},
+            label = { Text(label) },
+            colors = AssistChipDefaults.assistChipColors(
+                labelColor = color,
+            ),
+        )
     }
 }

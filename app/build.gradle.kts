@@ -19,7 +19,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.ftpembed"
+        applicationId = "com.ah.ddns"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -27,6 +27,17 @@ android {
 
         buildConfigField("int", "DEFAULT_FTP_PORT", "2121")
         buildConfigField("String", "DEFAULT_ROOT_RELATIVE", "\"Pictures/ftptest\"")
+        buildConfigField("String", "DDNS_API_BASE", "\"https://mvp.api.alphahalf.cc\"")
+        buildConfigField("String", "OIDC_ISSUER", "\"https://mvp.auth.alphahalf.cc/auth/v1/\"")
+        buildConfigField("String", "OIDC_CLIENT_ID", "\"ah-mobile\"")
+        buildConfigField("String", "OIDC_REDIRECT_SCHEME", "\"com.ah.ddns\"")
+        buildConfigField("String", "OIDC_REDIRECT_HOST", "\"oauth2redirect\"")
+        buildConfigField("String", "OIDC_REDIRECT_URI", "\"com.ah.ddns:/oauth2redirect\"")
+        buildConfigField(
+            "String",
+            "OIDC_SCOPE",
+            "\"openid profile email offline_access dns:records:read dns:records:write\"",
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
