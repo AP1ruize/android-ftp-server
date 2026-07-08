@@ -4,9 +4,12 @@ object LabelValidator {
     private val reservedLabels = setOf(
         "www",
         "api",
+        "ns",
         "ns1",
         "ns2",
+        "admin",
         "mail",
+        "smtp",
         "ftp",
         "auth",
     )

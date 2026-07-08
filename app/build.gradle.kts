@@ -39,6 +39,8 @@ android {
             "\"openid profile email offline_access dns:records:read dns:records:write\"",
         )
 
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.ah.ddns"
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -96,8 +98,32 @@ dependencies {
 
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
 
-    // Apache FTP
-    implementation("org.apache.ftpserver:ftpserver-core:1.1.1")
-    implementation("org.apache.mina:mina-core:2.0.16")
+    // OIDC auth
+    implementation("net.openid:appauth:0.11.1")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // Apache FTP — 1.2.1 fixes FTPSERVER-499 (FtpResponseEncoder thread-safety)
+    implementation("org.apache.ftpserver:ftpserver-core:1.2.1")
+    // ftpserver 1.2.1 pulls mina 2.2.x; pin 2.1.3 for minSdk 24 compatibility (DIRMINA-1123)
+    implementation("org.apache.mina:mina-core") {
+        version { strictly("2.1.3") }
+    }
+
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // HTTP / JSON
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-moshi:2.11.0")
+    implementation("com.squareup.moshi:moshi:1.15.1")
+    implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
+
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

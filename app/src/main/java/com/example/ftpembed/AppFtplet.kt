@@ -15,27 +15,27 @@ class AppFtplet(
 
     override fun onConnect(session: FtpSession?): FtpletResult {
         val state = stateMachine.onConnect(sessionId(session))
-        onEvent("Client connected: ${clientIp(session)}", state)
+        onEvent("客户端已连接：${clientIp(session)}", state)
         return FtpletResult.DEFAULT
     }
 
     override fun onDisconnect(session: FtpSession?): FtpletResult {
         val state = stateMachine.onDisconnect(sessionId(session))
-        onEvent("Client disconnected: ${clientIp(session)}", state)
+        onEvent("客户端已断开：${clientIp(session)}", state)
         return FtpletResult.DEFAULT
     }
 
     override fun onUploadStart(session: FtpSession?, request: FtpRequest?): FtpletResult {
         val filename = request?.argument ?: "unknown"
         val state = stateMachine.onUploadStart(sessionId(session), filename)
-        onEvent("Receiving file: $filename", state)
+        onEvent("📤 开始接收文件：$filename", state)
         return FtpletResult.DEFAULT
     }
 
     override fun onUploadEnd(session: FtpSession?, request: FtpRequest?): FtpletResult {
         val filename = request?.argument ?: "unknown"
         val state = stateMachine.onUploadEnd(sessionId(session), filename)
-        onEvent("File received: $filename", state)
+        onEvent("✅ 文件接收完成：$filename", state)
         return FtpletResult.DEFAULT
     }
 

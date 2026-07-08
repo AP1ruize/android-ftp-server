@@ -5,7 +5,7 @@ import java.util.Date
 import java.util.Locale
 
 object FtpLogFormatter {
-    private val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+    private val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
 
     fun formatEntry(text: String): String = "[${format.format(Date())}] $text"
 

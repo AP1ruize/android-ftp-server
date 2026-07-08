@@ -12,6 +12,17 @@ data class DdnsRecord(
     val ttl: Int,
 )
 
+data class Quota(
+    val limit: Int,
+    val used: Int,
+)
+
+sealed class DdnsUpdateResult {
+    data class Updated(val record: DdnsRecord) : DdnsUpdateResult()
+    data class NoChange(val record: DdnsRecord) : DdnsUpdateResult()
+    data object Throttled : DdnsUpdateResult()
+}
+
 sealed class DdnsSyncStatus {
     data object Idle : DdnsSyncStatus()
     data object Syncing : DdnsSyncStatus()

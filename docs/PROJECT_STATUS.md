@@ -107,10 +107,9 @@ FtpForegroundService
 | FTP 启停与文件写入 | ★★★★★ |
 | 默认根目录 + SAF | ★★★★★ |
 | 连接/断开 + 事件日志 | ★★★★☆ |
-| 相机 FTP 状态 Chip | ★★★☆☆ |
-| MVP OAuth 配置（无 PKCE） | ★★☆☆☆ |
-| Rauthy PKCE 登录 | ☆☆☆☆☆ |
-| ah_ddns API / FQDN / IP 上报 | ☆☆☆☆☆ |
+| 相机 FTP 状态 Chip | ★★★★☆ |
+| MVP OAuth 配置 + PKCE 登录 | ★★★★☆ |
+| ah_ddns API / FQDN / IP 上报 | ★★★★☆ |
 | 迁入 ah_kotlin | ☆☆☆☆☆ |
 
 ---
@@ -183,8 +182,7 @@ MVP 环境（`mvp.api.alphahalf.cc` + `mvp.auth.alphahalf.cc`）已部署；本 
 | [`DDNS_INTEGRATION_PLAN.md`](./DDNS_INTEGRATION_PLAN.md) | 全量 DDNS + FTP 分阶段计划 |
 | [`IMPLEMENTATION_NOTES_2026_07_08.md`](./IMPLEMENTATION_NOTES_2026_07_08.md) | 2026-07-08 编码进度 |
 
-**阶段 0（配置对齐）已完成**：`applicationId=com.ah.ddns`、`AuthConfig`、OAuth deep link。  
-**下一步**：AppAuth + `OidcAuthManager` / `TokenStore` / `AuthRepository`（见 RAUTHY_MVP_AUTH §8）。
+**阶段 0–6 代码已完成**；**下一步**：MVP 真机联调（见 IMPLEMENTATION_NOTES 验收清单）。
 
 ---
 

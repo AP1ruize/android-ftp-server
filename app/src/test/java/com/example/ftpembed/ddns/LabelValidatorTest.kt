@@ -21,9 +21,11 @@ class LabelValidatorTest {
 
     @Test
     fun validate_rejectsReservedLabels() {
-        val result = LabelValidator.validate("auth")
-
-        assertTrue(result is LabelValidationResult.Invalid)
+        val reserved = listOf("auth", "ns", "admin", "smtp")
+        reserved.forEach { label ->
+            val result = LabelValidator.validate(label)
+            assertTrue("$label should be reserved", result is LabelValidationResult.Invalid)
+        }
     }
 
     @Test

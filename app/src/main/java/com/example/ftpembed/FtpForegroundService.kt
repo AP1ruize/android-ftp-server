@@ -7,6 +7,7 @@ import android.os.FileObserver
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.example.ftpembed.ftp.FtpClientStateMachine
+import com.example.ftpembed.network.LocalIpProvider
 import org.apache.ftpserver.FtpServer
 import org.apache.ftpserver.FtpServerFactory
 import org.apache.ftpserver.listener.ListenerFactory
@@ -14,8 +15,6 @@ import org.apache.ftpserver.ftplet.Authority
 import org.apache.ftpserver.usermanager.impl.BaseUser
 import org.apache.ftpserver.usermanager.impl.WritePermission
 import java.io.File
-import java.net.Inet4Address
-import java.net.NetworkInterface
 import java.util.concurrent.atomic.AtomicBoolean
 
 class FtpForegroundService : Service() {
@@ -265,14 +264,7 @@ class FtpForegroundService : Service() {
     }
 
     private fun getLocalIpv4(): String {
-        return try {
-            val en = NetworkInterface.getNetworkInterfaces()
-            en.toList().flatMap { it.inetAddresses.toList() }
-                .firstOrNull { it is Inet4Address && !it.isLoopbackAddress }
-                ?.hostAddress ?: "0.0.0.0"
-        } catch (e: Exception) {
-            lastIp.ifEmpty { "0.0.0.0" }
-        }
+        return LocalIpProvider.getLanIpv4() ?: lastIp.ifEmpty { "0.0.0.0" }
     }
 
     fun terminateService() {
