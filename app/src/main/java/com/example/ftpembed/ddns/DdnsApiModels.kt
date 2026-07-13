@@ -57,4 +57,6 @@ internal fun RecordResponse.toDomain(): DdnsRecord =
         fqdn = fqdn,
         ipv4 = ipv4,
         ttl = ttl,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
     )

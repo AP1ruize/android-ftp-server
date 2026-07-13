@@ -44,6 +44,7 @@ class AppFtplet(
         return address.hostString ?: address.address?.hostAddress ?: "unknown"
     }
 
+    /** Stable across the session lifetime; must not depend on clientAddress (null on hard disconnect). */
     private fun sessionId(session: FtpSession?): String =
-        "${clientIp(session)}:${session?.hashCode() ?: "unknown"}"
+        session?.sessionId?.toString() ?: "unknown"
 }

@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.ftpembed.FqdnUiState
 import com.example.ftpembed.auth.AuthState
+import com.example.ftpembed.ddns.DdnsSyncStatus
 
 @Composable
 fun FqdnSection(
@@ -39,6 +40,15 @@ fun FqdnSection(
                 "Shard：$shard · Zone：$zone",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+
+        if (fqdnState.syncStatus is DdnsSyncStatus.NeedsCreate) {
+            Text(
+                "请设置 4 位 Label 并保存 FQDN（系统不会自动创建）",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(top = 8.dp),
             )
         }
 

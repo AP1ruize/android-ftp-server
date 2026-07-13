@@ -10,10 +10,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class DdnsUpdateScheduler(
-    private val repository: DdnsRepository,
+    private val ensurer: DdnsBindingEnsurer,
+    private val prefs: DdnsPrefs,
     private val networkMonitor: NetworkMonitor,
     private val getLanIpv4: () -> String? = LocalIpProvider::getLanIpv4,
-    private val prefs: DdnsPrefs,
     private val scope: CoroutineScope,
 ) {
     private var networkJob: Job? = null
@@ -50,9 +50,7 @@ class DdnsUpdateScheduler(
         networkMonitor.stop()
     }
 
-    suspend fun syncNow() {
-        trySync()
-    }
+    suspend fun syncNow(): DdnsEnsureResult = trySync()
 
     private fun scheduleDebouncedSync() {
         debounceJob?.cancel()
@@ -62,23 +60,31 @@ class DdnsUpdateScheduler(
         }
     }
 
-    private suspend fun trySync() {
-        if (System.currentTimeMillis() < throttleUntilEpochMs) return
-        if (!networkMonitor.isUsableNetwork()) return
+    private suspend fun trySync(): DdnsEnsureResult {
+        if (System.currentTimeMillis() < throttleUntilEpochMs) {
+            return DdnsEnsureResult.Skipped
+        }
+        if (!networkMonitor.isUsableNetwork()) {
+            return DdnsEnsureResult.Skipped
+        }
+        if (getLanIpv4() == null) {
+            return DdnsEnsureResult.Skipped
+        }
+        // No sticky FQDN yet — do not auto-create.
+        if (prefs.selectedLabel.isNullOrBlank()) {
+            return DdnsEnsureResult.Skipped
+        }
 
-        val label = prefs.selectedLabel ?: return
-        val ipv4 = getLanIpv4() ?: return
-
-        repository.updateIp(label, ipv4).onSuccess { result ->
-            when (result) {
-                is DdnsUpdateResult.Updated,
-                is DdnsUpdateResult.NoChange,
-                -> Unit
-                is DdnsUpdateResult.Throttled -> {
-                    throttleUntilEpochMs = System.currentTimeMillis() + THROTTLE_RETRY_MS
-                }
+        val result = ensurer.ensureOrHeartbeat()
+        when {
+            result is DdnsEnsureResult.Heartbeat && result.update is DdnsUpdateResult.Throttled -> {
+                throttleUntilEpochMs = System.currentTimeMillis() + THROTTLE_RETRY_MS
+            }
+            result is DdnsEnsureResult.Reused && result.update is DdnsUpdateResult.Throttled -> {
+                throttleUntilEpochMs = System.currentTimeMillis() + THROTTLE_RETRY_MS
             }
         }
+        return result
     }
 
     companion object {

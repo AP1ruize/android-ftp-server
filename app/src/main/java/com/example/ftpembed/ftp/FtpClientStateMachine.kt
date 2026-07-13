@@ -7,41 +7,44 @@ enum class FtpClientState {
 }
 
 class FtpClientStateMachine {
+    private val lock = Any()
     private val activeSessions = mutableSetOf<String>()
     private val activeTransfers = mutableSetOf<String>()
 
     val state: FtpClientState
-        get() = when {
-            activeTransfers.isNotEmpty() -> FtpClientState.Transferring
-            activeSessions.isNotEmpty() -> FtpClientState.Connected
-            else -> FtpClientState.Disconnected
-        }
+        get() = synchronized(lock) { computeState() }
 
-    fun onConnect(sessionId: String): FtpClientState {
+    fun onConnect(sessionId: String): FtpClientState = synchronized(lock) {
         activeSessions += sessionId
-        return state
+        computeState()
     }
 
-    fun onDisconnect(sessionId: String): FtpClientState {
+    fun onDisconnect(sessionId: String): FtpClientState = synchronized(lock) {
         activeSessions -= sessionId
         activeTransfers.removeAll { it.startsWith("$sessionId:") }
-        return state
+        computeState()
     }
 
-    fun onUploadStart(sessionId: String, transferId: String): FtpClientState {
+    fun onUploadStart(sessionId: String, transferId: String): FtpClientState = synchronized(lock) {
         activeSessions += sessionId
         activeTransfers += "$sessionId:$transferId"
-        return state
+        computeState()
     }
 
-    fun onUploadEnd(sessionId: String, transferId: String): FtpClientState {
+    fun onUploadEnd(sessionId: String, transferId: String): FtpClientState = synchronized(lock) {
         activeTransfers -= "$sessionId:$transferId"
-        return state
+        computeState()
     }
 
-    fun reset(): FtpClientState {
+    fun reset(): FtpClientState = synchronized(lock) {
         activeSessions.clear()
         activeTransfers.clear()
-        return state
+        computeState()
+    }
+
+    private fun computeState(): FtpClientState = when {
+        activeTransfers.isNotEmpty() -> FtpClientState.Transferring
+        activeSessions.isNotEmpty() -> FtpClientState.Connected
+        else -> FtpClientState.Disconnected
     }
 }

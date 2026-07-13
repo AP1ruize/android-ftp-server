@@ -24,6 +24,8 @@ class DdnsApiModelsTest {
         assertEquals("ab12.k3m9x2.ah.app", record.fqdn)
         assertEquals("192.168.0.42", record.ipv4)
         assertEquals(15, record.ttl)
+        assertEquals("2026-07-08T10:00:00Z", record.createdAt)
+        assertEquals("2026-07-08T10:00:00Z", record.updatedAt)
     }
 
     @Test

@@ -114,6 +114,31 @@ class MainActivity : ComponentActivity() {
             viewModel.onAuthStateChanged(authState)
         }
 
+        var ddnsAlert by remember { mutableStateOf<Pair<String, String>?>(null) }
+        LaunchedEffect(Unit) {
+            viewModel.uiEvents.collect { event ->
+                when (event) {
+                    is com.example.ftpembed.ddns.DdnsUiEvent.Alert -> {
+                        ddnsAlert = event.title to event.message
+                    }
+                }
+            }
+        }
+
+        if (ddnsAlert != null) {
+            val (title, message) = ddnsAlert!!
+            AlertDialog(
+                onDismissRequest = { ddnsAlert = null },
+                title = { Text(title) },
+                text = { Text(message) },
+                confirmButton = {
+                    TextButton(onClick = { ddnsAlert = null }) {
+                        Text("知道了")
+                    }
+                },
+            )
+        }
+
         var rootLabel by remember { mutableStateOf(settings.getConfiguredRootLabel()) }
         var status by remember { mutableStateOf("状态：未启动") }
         var info by remember { mutableStateOf("连接信息会显示在这里") }
