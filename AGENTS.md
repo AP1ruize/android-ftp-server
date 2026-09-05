@@ -22,8 +22,8 @@ task.
 
 - P0 FTP is limited to a trusted LAN or phone hotspot. Do not expose plaintext
   FTP to the public Internet.
-- Anonymous access is off by default. Use session-specific credentials and do
-  not log them.
+- Anonymous camera access is permitted on a trusted LAN or phone hotspot.
+  Configured credentials remain optional and must never be logged.
 - Bind and advertise only the intended local interface. DDNS is address
   discovery, not encryption, authorization, NAT traversal, or a tunnel.
 - Never delete, overwrite, or silently mutate an original photo. Duplicate-name
